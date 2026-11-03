@@ -58,10 +58,10 @@ jobs:
             perl -pi -e 's/\r$//' "$f"
           done
           grep -lc $'\r' dxb/patches/*.patch 2>/dev/null | head -3 || echo "no CRLF left"
-          # libfirehose_kernel is arm64e-only; the vince kernel is plain arm64
-          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
-          grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
-          ls dxb/patches | head -5
+          # Apply ios-vince's dxb patches: libfirehose arm64 (Cortex-A53) and a
+          # target-aware patch loop that hard-fails on critical vince patches.
+          python3 tools/patch_dxb.py dxb/build.sh
+          grep -c 'VALID_ARCHS="arm64"' dxb/build.sh
           ls dxb/patches | wc -l
 
       - name: Toolchain (Xcode 15 only)
@@ -84,41 +84,11 @@ jobs:
         env:
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: |
-          # ---- Pass 1: source setup -------------------------------------------
-          # build.sh clones xnu into dxb/xnu, applies patches from dxb/patches/
-          # (MACOS_VERSION 13.5 -> PATCH_DIR=patches, which is where we copied
-          # them), then fails in make because VINCE is not yet registered.
-          # That failure is expected; what we need is the prepared source tree.
-          bash build.sh > pass1.log 2>&1 || true
-          echo "pass1 tail:"
-          tail -25 pass1.log
-          test -f xnu/makedefs/MakeInc.kernel || { echo "FATAL: xnu source missing after pass 1"; exit 1; }
-          echo "xnu source tree ready: $(git -C xnu log --oneline -1)"
-
-          # ---- Register VINCE machine config (idempotent, verified) -----------
-          cat > register_vince.py << 'PYEOF'
-          import sys
-          f = 'xnu/makedefs/MakeInc.kernel'
-          c = open(f).read()
-          if 'VINCE' in c:
-              print('VINCE already registered')
-              sys.exit(0)
-          print('$(error occurrences before patch: ' + str(c.count('$(error'))) 
-          c = c.replace(
-              '$(error Unsupported',
-              'else ifeq ($(CURRENT_MACHINE_CONFIG), VINCE)\ninclude $(SOURCE)/makedefs/MakeInc.ARM64\n$(error Unsupported'
-          )
-          open(f, 'w').write(c)
-          c2 = open(f).read()
-          if 'VINCE' not in c2:
-              print('FATAL: VINCE registration failed - anchor pattern not found')
-              sys.exit(1)
-          print('VINCE machine config registered')
-          PYEOF
-          python3 register_vince.py
-          grep -c 'VINCE' xnu/makedefs/MakeInc.kernel
-
-          # ---- Pass 2: real build (incremental; deps staged during pass 1) ----
+          # Single pass, exactly like the proven ios-vince xnu-vince.yml run:
+          # patch 0004 registers VINCE in SUPPORTED_ARM64_MACHINE_CONFIGS and
+          # MACHINE_FLAGS_ARM64_VINCE, so no makedefs injection is needed.
+          # (The previous register_vince.py step injected a 11215-era
+          #  include MakeInc.ARM64 branch that does not exist in xnu-8796.)
           set -o pipefail
           bash build.sh 2>&1 | tee build.log
           rc=$?

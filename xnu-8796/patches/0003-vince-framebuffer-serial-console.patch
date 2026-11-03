@@ -1,20 +1,19 @@
-﻿diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 index 997a4ab..db26bbe 100644
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -697,6 +697,148 @@ register_serial_functions(struct pe_serial_functions *fns)
+@@ -697,6 +697,160 @@ register_serial_functions(struct pe_serial_functions *fns)
  	gPESF = fns;
  }
  
 +/*****************************************************************************/
 +
 +/*
-+ * vince: framebuffer "serial" for boards with no usable UART (the Redmi Note
-+ * 10 Pro's debug UART engine runs in SPI mode). kprintf output is drawn onto
-+ * the boot framebuffer described by the ADT node "vince-fbcon":
-+ *   reg    = <phys size>       absolute physical address, not arm-io relative
-+ *   width, height              pixels
-+ *   stride                     bytes per line, 32bpp
++ * vince: framebuffer "serial" console for Xiaomi Redmi 5 Plus (MSM8953).
++ * kprintf output is drawn onto the boot framebuffer described by the ADT:
++ *   reg    = <phys size>       absolute physical address (0x90001000)
++ *   width, height              1080 x 2160
++ *   stride                     3240 bytes (24bpp RGB888)
 + * Lines wrap back to the top instead of scrolling; the line after the cursor
 + * is kept blank so the newest output is easy to find.
 + */
@@ -22,10 +21,14 @@ index 997a4ab..db26bbe 100644
 +extern unsigned char iso_font[256 * 16];
 +
 +#define FBCON_SCALE     2
-+#define FBCON_FG        0xffffffffu
-+#define FBCON_BG        0xff000000u
++#define FBCON_FG_R      0xff
++#define FBCON_FG_G      0xff
++#define FBCON_FG_B      0xff
++#define FBCON_BG_R      0x00
++#define FBCON_BG_G      0x00
++#define FBCON_BG_B      0x00
 +
-+static volatile uint32_t *fbcon_base;
++static volatile uint8_t *fbcon_base;
 +static uint32_t fbcon_width, fbcon_height, fbcon_stride;
 +static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
 +
@@ -33,9 +36,11 @@ index 997a4ab..db26bbe 100644
 +fbcon_clear_row(uint32_t row)
 +{
 +	for (uint32_t y = row * 16 * FBCON_SCALE; y < (row + 1) * 16 * FBCON_SCALE; y++) {
-+		volatile uint32_t *line = fbcon_base + y * (fbcon_stride / 4);
++		volatile uint8_t *line = fbcon_base + y * fbcon_stride;
 +		for (uint32_t x = 0; x < fbcon_width; x++) {
-+			line[x] = FBCON_BG;
++			line[x * 3 + 0] = FBCON_BG_B;
++			line[x * 3 + 1] = FBCON_BG_G;
++			line[x * 3 + 2] = FBCON_BG_R;
 +		}
 +	}
 +}
@@ -84,11 +89,17 @@ index 997a4ab..db26bbe 100644
 +	uint32_t x0 = fbcon_col * 8 * FBCON_SCALE, y0 = fbcon_row * 16 * FBCON_SCALE;
 +	for (uint32_t gy = 0; gy < 16; gy++) {
 +		for (uint32_t sy = 0; sy < FBCON_SCALE; sy++) {
-+			volatile uint32_t *line = fbcon_base + (y0 + gy * FBCON_SCALE + sy) * (fbcon_stride / 4) + x0;
++			volatile uint8_t *line = fbcon_base + (y0 + gy * FBCON_SCALE + sy) * fbcon_stride;
 +			for (uint32_t gx = 0; gx < 8; gx++) {
-+				uint32_t px = (glyph[gy] & (1u << gx)) ? FBCON_FG : FBCON_BG;
++				int bit = (glyph[gy] & (1u << gx)) != 0;
++				uint8_t r = bit ? FBCON_FG_R : FBCON_BG_R;
++				uint8_t g = bit ? FBCON_FG_G : FBCON_BG_G;
++				uint8_t b = bit ? FBCON_FG_B : FBCON_BG_B;
 +				for (uint32_t sx = 0; sx < FBCON_SCALE; sx++) {
-+					line[gx * FBCON_SCALE + sx] = px;
++					uint32_t px = (x0 + gx * FBCON_SCALE + sx) * 3;
++					line[px + 0] = b;
++					line[px + 1] = g;
++					line[px + 2] = r;
 +				}
 +			}
 +		}
@@ -115,7 +126,7 @@ index 997a4ab..db26bbe 100644
 +	.transmit_data = fbcon_transmit_data,
 +	.receive_ready = fbcon_receive_ready,
 +	.receive_data = fbcon_receive_data,
-+	.device = SERIAL_vince_FBCON
++	.device = SERIAL_SWEET_FBCON
 +};
 +
 +static void
@@ -126,7 +137,8 @@ index 997a4ab..db26bbe 100644
 +	uint32_t const *val;
 +	unsigned int size;
 +
-+	if (SecureDTFindEntry("name", "vince-fbcon", &entry) != kSuccess ||
++	if ((SecureDTFindEntry("name", "vince-fbcon", &entry) != kSuccess &&
++	     SecureDTFindEntry("name", "sweet-fbcon", &entry) != kSuccess) != 0 ||
 +	    SecureDTGetProperty(entry, "reg", (void const **)&reg, &size) != kSuccess || size < 16) {
 +		return;
 +	}
@@ -139,10 +151,10 @@ index 997a4ab..db26bbe 100644
 +	if (SecureDTGetProperty(entry, "stride", (void const **)&val, &size) == kSuccess) {
 +		fbcon_stride = *val;
 +	}
-+	if (!fbcon_width || !fbcon_height || fbcon_stride < fbcon_width * 4) {
++	if (!fbcon_width || !fbcon_height || fbcon_stride < fbcon_width * 3) {
 +		return;
 +	}
-+	fbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);
++	fbcon_base = (volatile uint8_t *)ml_io_map_wcomb(reg[0], reg[1]);
 +	if (fbcon_base != NULL) {
 +		register_serial_functions(&vince_fbcon_serial_functions);
 +	}
@@ -151,7 +163,7 @@ index 997a4ab..db26bbe 100644
  #if HIBERNATION
  /**
   * Transitions the serial driver into a mode that can be run in the hibernation
-@@ -777,6 +919,8 @@ serial_init(void)
+@@ -777,6 +933,8 @@ serial_init(void)
  
  	PE_parse_boot_argn("disable-uart-irq", &disable_uart_irq, sizeof(disable_uart_irq));
  
@@ -170,8 +182,7 @@ index 404b50b..de0d744 100644
  	SERIAL_VMAPPLE_UART=0x8,
 -	SERIAL_DCC_UART=0x10
 +	SERIAL_DCC_UART=0x10,
-+	SERIAL_vince_FBCON=0x20
++	SERIAL_SWEET_FBCON=0x20
  } serial_device_t;
  
  kern_return_t serial_irq_enable(serial_device_t device);
-

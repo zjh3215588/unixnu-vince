@@ -1,18 +1,13 @@
-﻿#!/bin/bash
+#!/bin/bash
 # dxb runs patches/*.sh from the XNU source root before applying *.patch.
 set -euo pipefail
 
-[[ "${MACHINE_CONFIG:-}" == vince ]] || exit 0
+[[ "${MACHINE_CONFIG:-}" == SWEET || "${MACHINE_CONFIG:-}" == VINCE ]] || exit 0
 [[ "${MACOS_VERSION:-}" == 13.5 ]] || {
-    echo 'vince libpthread integration requires xnu-8796.141.3 (macOS 13.5)' >&2
+    echo 'SWEET libpthread integration requires xnu-8796.141.3 (macOS 13.5)' >&2
     exit 1
 }
 [[ -f bsd/pthread/pthread_shims.c ]] || exit 1
-
-if [[ -d bsd/pthread/vince_libpthread ]]; then
-    echo "libpthread provider already staged; skipping"
-    exit 0
-fi
 
 # libpthread-514.100.2 is paired with xnu-8796.141.3 in Apple's macos-135
 # release.json. Fetch the immutable commit, never a moving branch/tag.
@@ -31,7 +26,7 @@ import shutil
 import sys
 
 source = Path(sys.argv[1])
-target = Path('bsd/pthread/vince_libpthread')
+target = Path('bsd/pthread/sweet_libpthread')
 if target.exists():
     raise SystemExit(f'refusing to overwrite existing provider: {target}')
 # Preserve upstream copyright/license headers; no downloaded sources in git.
@@ -66,6 +61,5 @@ PY
 # Kernel builds use -nostdinc. Carry the real SDK target definitions beside
 # the provider so local compiles from the uploaded build tree work as well.
 pthread_sdk=$(xcrun --sdk macosx --show-sdk-path)
-cp "$pthread_sdk/usr/include/TargetConditionals.h" bsd/pthread/vince_libpthread/
-echo "Staged libpthread-514.100.2 ($pthread_sha) for vince"
-
+cp "$pthread_sdk/usr/include/TargetConditionals.h" bsd/pthread/sweet_libpthread/
+echo "Staged libpthread-514.100.2 ($pthread_sha) for SWEET"
