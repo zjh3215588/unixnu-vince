@@ -35,7 +35,7 @@ env:
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
   MACOS_VERSION: "13.5"          # -> xnu-8796.141.3
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
-  MACHINE_CONFIG: ARM64
+  MACHINE_CONFIG: vince
 
 jobs:
   build:
@@ -88,9 +88,30 @@ jobs:
         env:
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: |
-          # error->info: don't stop on unsupported machine config
-          sed -i '' 's/\$(error/\$(info/g' xnu/makedefs/MakeInc.kernel || true
-          echo "MakeInc.kernel patched: error->info"
+          # Write the VINCE registration script (heredoc prevents shell expansion)
+          cat > /tmp/register_vince.py << 'PYEOF'
+          import sys
+          f = 'xnu/makedefs/MakeInc.kernel'
+          c = open(f).read()
+          if 'VINCE' in c:
+              print('VINCE already registered')
+              sys.exit(0)
+          # Print what configs ARE supported (for debugging)
+          import re
+          for m in re.finditer(r'CURRENT_MACHINE_CONFIG\),?\s*(\w+)', c):
+              print('  supported config: ' + m.group(1))
+          # Add VINCE case before the error line
+          c = c.replace(
+              '$(error Unsupported',
+              'else ifeq ($(CURRENT_MACHINE_CONFIG), VINCE)\ninclude $(SOURCE)/makedefs/MakeInc.ARM64\n$(error Unsupported'
+          )
+          open(f, 'w').write(c)
+          print('VINCE machine config registered')
+          PYEOF
+          python3 /tmp/register_vince.py
+          # Verify the registration
+          grep -c 'VINCE' xnu/makedefs/MakeInc.kernel || echo "WARNING: VINCE not found in MakeInc.kernel"
+          # Build
           bash build.sh 2>&1 | tee build.log
           echo "=== exit: $? ==="
           grep -c ' error: ' build.log || true
