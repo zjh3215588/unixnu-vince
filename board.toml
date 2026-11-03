@@ -1,13 +1,20 @@
-﻿# UniXNU device repo for Xiaomi Pad 5 (vince)
+﻿# UniXNU device repo for Redmi 5 Plus (vince / MSM8953). Hardware facts corrected;
+# # TODO(vince): the LBA geometry below is nabu's UFS measurement and does NOT apply.
+# vince is eMMC; measure via fastboot getvar partition-size:userdata + /proc/partitions
+# from TWRP before the first userdata build.
+[userdata] eMMC geometry + owned_memory_size still need on-device measurement (TODO notes inline).
 # Only the kernel build path is configured; userdata geometry needs on-device measurement.
 
 [board]
 name = "vince"
-soc = "SM8150"
-description = "Xiaomi Pad 5"
+soc = "MSM8953"
+description = "Xiaomi Redmi 5 Plus (vince, Snapdragon 625, 8x Cortex-A53)"
 kit = "vince"
 
 [ipsw]
+# TODO(vince): switch to the iPadOS 16.6.1 IPSW the shim line's mkiosroot uses
+# (xnu-8796-matching userland). The iPad Pro 17.7.11 entry is a template placeholder,
+# NOT verified for vince.
 url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
 product = "iPad7,1"
 version = "17.7.11"
@@ -89,8 +96,11 @@ tool = "scripts/make-vince-adt.py"
 # handset -- made the boot stall inside kminit(), at
 # IOsurfaceRoot::installMemoryRegions(), which allocates from this window.
 # make-vince-adt.py accepts up to 0x200000000 (8 GiB).
-owned_memory_size = "0x130000000"
-dram_size = "0x300000000"
+# TODO(vince): nabu's measured values below DO NOT apply. vince is 3 GB DRAM
+# (Redmi 5 Plus 3+32 mainstream config); owned_memory_size must be measured the
+# same way nabu did (boot with a conservative window, then raise until kminit stalls).
+owned_memory_size = "0x40000000"   # 1 GiB conservative start (TODO: measure)
+dram_size = "0xC0000000"           # 3 GiB physical (TODO: verify via TWRP /proc/meminfo)
 cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
 # false selects make-vince-adt.py's --data-ramdisk, which writes the memory-map node named
 # "RAMDisk". true writes "PackedRAMDisk" instead, and DarwinBoot rejects that pairing with
@@ -108,6 +118,9 @@ ipad_identity = true
 # asking for it only blocks a path that never needed it.
 unique_chip_id = false
 
+# TODO(vince): the LBA geometry below is nabu's UFS measurement and does NOT apply.
+# vince is eMMC; measure via fastboot getvar partition-size:userdata + /proc/partitions
+# from TWRP before the first userdata build.
 [userdata]
 # Measured 2026-10-20 via TWRP sysfs (device has an upgraded/larger UFS):
 #   /sys/block/sda/sda31 (userdata) start = 21234176 sectors of 512 bytes
@@ -125,7 +138,10 @@ windows = [
 
 [kernel.prelink]
 tool = "kits/NativePrelink/emit_prelink.py"
-kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+# TODO(vince): path below is nabu's BCM2837-era residue; the vince build product is
+# expected at build/xnu/ios-obj/DEVELOPMENT_ARM64_VINCE/mach.development.vince.unstripped.noctf
+# (verify after the first local WSL build lands)
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_VINCE/mach.development.vince.unstripped.noctf"
 kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
 slide = "-0x1000000"
 early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
