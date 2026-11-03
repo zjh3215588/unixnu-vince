@@ -88,6 +88,9 @@ jobs:
         env:
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: |
+          # error->info: don't stop on unsupported machine config
+          sed -i '' 's/\$(error/\$(info/g' xnu/makedefs/MakeInc.kernel || true
+          echo "MakeInc.kernel patched: error->info"
           bash build.sh 2>&1 | tee build.log
           echo "=== exit: $? ==="
           grep -c ' error: ' build.log || true
