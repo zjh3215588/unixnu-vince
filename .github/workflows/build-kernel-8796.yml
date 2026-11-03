@@ -1,4 +1,4 @@
-﻿name: build-xnu-8796
+name: build-xnu-8796
 
 # Parallel line to build-kernel.yml (xnu-10063). This one targets the xnu generation
 # that actually matches an iPadOS 16.6.1 userland: xnu-8796.141.3 (macOS 13.5).
@@ -56,6 +56,13 @@ jobs:
             perl -pi -e 's/\r$//' "$f"
           done
           grep -lc $'\r' dxb/patches/*.patch 2>/dev/null | head -3 || echo "no CRLF left"
+          # Register VINCE as a valid machine config in the kernel build system
+          # The build fails with "Unsupported CURRENT_MACHINE_CONFIG VINCE" without this
+          sed -i '' '/Unsupported CURRENT_MACHINE_CONFIG/i\
+          else ifeq ($(CURRENT_MACHINE_CONFIG), VINCE)\
+          include $(SOURCE)/makedefs/MakeInc.ARM64\
+          ' dxb/xnu/makedefs/MakeInc.kernel 2>/dev/null || true
+          grep -c 'VINCE' dxb/xnu/makedefs/MakeInc.kernel || echo "VINCE registration may have failed"
           # libfirehose_kernel is arm64e-only; the vince kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
