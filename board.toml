@@ -12,9 +12,11 @@ description = "Xiaomi Redmi 5 Plus (vince, Snapdragon 625, 8x Cortex-A53)"
 kit = "vince"
 
 [ipsw]
-# TODO(vince): switch to the iPadOS 16.6.1 IPSW the shim line's mkiosroot uses
-# (xnu-8796-matching userland). The iPad Pro 17.7.11 entry is a template placeholder,
-# NOT verified for vince.
+# TODO(vince): switch to the IPSW the shim line's mkiosroot actually uses:
+#   https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw
+# (iPhone X userland, the verified rootfs source for the running shim line).
+# Component names / sha256 in [ipsw.sha256] must then be re-measured for that IPSW.
+# The iPad Pro 17.7.11 entry below is a template placeholder, NOT verified for vince.
 url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
 product = "iPad7,1"
 version = "17.7.11"
