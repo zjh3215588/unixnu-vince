@@ -1,4 +1,4 @@
-name: build-xnu-8796
+﻿name: build-xnu-8796
 
 # Parallel line to build-kernel.yml (xnu-10063). This one targets the xnu generation
 # that actually matches an iPadOS 16.6.1 userland: xnu-8796.141.3 (macOS 13.5).
@@ -9,7 +9,9 @@ name: build-xnu-8796
 #     the runner must stay on macos-14 with its oldest Xcode 15.
 #   * libfirehose_kernel is built arm64e-only; the vince kernel is plain arm64,
 #     so build.sh has to be told to build arm64 as well.
-#   * MACHINE_CONFIG=vince selects the MASTER.arm64.vince config that patch 0006 adds.
+#   * MACHINE_CONFIG=VINCE selects the case branch that register_vince.py injects
+#     into xnu/makedefs/MakeInc.kernel (MakeInc matches machine configs verbatim,
+#     so the env var must be uppercase even though the patch adds MASTER.arm64.vince).
 
 on:
   workflow_dispatch:
@@ -35,7 +37,7 @@ env:
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
   MACOS_VERSION: "13.5"          # -> xnu-8796.141.3
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
-  MACHINE_CONFIG: vince
+  MACHINE_CONFIG: VINCE
 
 jobs:
   build:
@@ -62,12 +64,6 @@ jobs:
           ls dxb/patches | head -5
           ls dxb/patches | wc -l
 
-      - name: Register VINCE machine config
-        run: |
-          sed -i '' 's/\$(error/\$(info/g' dxb/xnu/makedefs/MakeInc.kernel || true
-          echo "MakeInc.kernel: error->info patched (build continues on unsupported config)"
-          grep -c 'info' dxb/xnu/makedefs/MakeInc.kernel || true
-
       - name: Toolchain (Xcode 15 only)
         run: |
           brew install jq gum bash cmake ninja || true
@@ -88,33 +84,47 @@ jobs:
         env:
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: |
-          # Write the VINCE registration script (heredoc prevents shell expansion)
-          cat > /tmp/register_vince.py << 'PYEOF'
+          # ---- Pass 1: source setup -------------------------------------------
+          # build.sh clones xnu into dxb/xnu, applies patches from dxb/patches/
+          # (MACOS_VERSION 13.5 -> PATCH_DIR=patches, which is where we copied
+          # them), then fails in make because VINCE is not yet registered.
+          # That failure is expected; what we need is the prepared source tree.
+          bash build.sh > pass1.log 2>&1 || true
+          echo "pass1 tail:"
+          tail -25 pass1.log
+          test -f xnu/makedefs/MakeInc.kernel || { echo "FATAL: xnu source missing after pass 1"; exit 1; }
+          echo "xnu source tree ready: $(git -C xnu log --oneline -1)"
+
+          # ---- Register VINCE machine config (idempotent, verified) -----------
+          cat > register_vince.py << 'PYEOF'
           import sys
           f = 'xnu/makedefs/MakeInc.kernel'
           c = open(f).read()
           if 'VINCE' in c:
               print('VINCE already registered')
               sys.exit(0)
-          # Print what configs ARE supported (for debugging)
-          import re
-          for m in re.finditer(r'CURRENT_MACHINE_CONFIG\),?\s*(\w+)', c):
-              print('  supported config: ' + m.group(1))
-          # Add VINCE case before the error line
+          print('$(error occurrences before patch: ' + str(c.count('$(error'))) 
           c = c.replace(
               '$(error Unsupported',
               'else ifeq ($(CURRENT_MACHINE_CONFIG), VINCE)\ninclude $(SOURCE)/makedefs/MakeInc.ARM64\n$(error Unsupported'
           )
           open(f, 'w').write(c)
+          c2 = open(f).read()
+          if 'VINCE' not in c2:
+              print('FATAL: VINCE registration failed - anchor pattern not found')
+              sys.exit(1)
           print('VINCE machine config registered')
           PYEOF
-          python3 /tmp/register_vince.py
-          # Verify the registration
-          grep -c 'VINCE' xnu/makedefs/MakeInc.kernel || echo "WARNING: VINCE not found in MakeInc.kernel"
-          # Build
+          python3 register_vince.py
+          grep -c 'VINCE' xnu/makedefs/MakeInc.kernel
+
+          # ---- Pass 2: real build (incremental; deps staged during pass 1) ----
+          set -o pipefail
           bash build.sh 2>&1 | tee build.log
-          echo "=== exit: $? ==="
+          rc=$?
+          echo "=== build.sh exit: $rc ==="
           grep -c ' error: ' build.log || true
+          exit $rc
 
       - name: Collect
         if: always()
