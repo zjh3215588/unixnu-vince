@@ -56,25 +56,10 @@ jobs:
             perl -pi -e 's/\r$//' "$f"
           done
           grep -lc $'\r' dxb/patches/*.patch 2>/dev/null | head -3 || echo "no CRLF left"
-          # Register VINCE machine config (python: reliable cross-platform)
-          python3 -c "
-          f = 'dxb/xnu/makedefs/MakeInc.kernel'
-          c = open(f).read()
-          if 'VINCE' not in c:
-              c += '\nifeq (\$(CURRENT_MACHINE_CONFIG), VINCE)\n'
-              c += 'include \$(SOURCE)/makedefs/MakeInc.ARM64\n'
-              c += 'endif\n'
-              open(f, 'w').write(c)
-              print('VINCE registered in MakeInc.kernel')
-          else:
-              print('VINCE already registered')
-          "
-          # Create MakeInc.VINCE from ARM64 as the machine-specific config
-          if [ -f dxb/xnu/makedefs/MakeInc.ARM64 ]; then
-            cp dxb/xnu/makedefs/MakeInc.ARM64 dxb/xnu/makedefs/MakeInc.VINCE
-            echo "MakeInc.VINCE created"
-          fi
-          grep -c 'VINCE' dxb/xnu/makedefs/MakeInc.kernel || echo "VINCE registration FAILED"
+          # Register VINCE machine config (append at end of MakeInc.kernel)
+          echo 'ifeq ($(CURRENT_MACHINE_CONFIG), VINCE)' >> dxb/xnu/makedefs/MakeInc.kernel
+          echo 'include $(SOURCE)/makedefs/MakeInc.ARM64' >> dxb/xnu/makedefs/MakeInc.kernel
+          echo 'endif' >> dxb/xnu/makedefs/MakeInc.kernel
           # libfirehose_kernel is arm64e-only; the vince kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
@@ -122,4 +107,3 @@ jobs:
             out/
             dxb/build.log
           if-no-files-found: warn
-
