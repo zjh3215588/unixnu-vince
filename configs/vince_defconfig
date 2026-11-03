@@ -1,4 +1,4 @@
-﻿# vince_defconfig
+# vince_defconfig
 # vince (MSM8953): copied from nabu_defconfig template; UFS/DWC3 switches disabled
 # because vince hardware is eMMC + no DWC3 (see TODOs below).
 # Mirrors UniXNU-uke's uke-full_defconfig -- the configuration that mounts a root volume and
@@ -23,7 +23,12 @@ CONFIG_XNU_ARMCPU=y
 # the bundle exists.
 # TODO(vince): vince storage is eMMC (driver lives in the ios-vince patch set as
 # vince_mmc, patches 0091/0094) -- the UniXNU NativeUfs archive has no eMMC support yet.
-# CONFIG_XNU_NATIVE_UFS=y
+CONFIG_XNU_NATIVE_UFS=y
+CONFIG_XNU_NABU_UFS_REGISTER_PROBE=y
+# register-probe mode: NativeUfs never compiles the IOBlockStorageDevice subclass,
+# so the kernel link does not need IOStorageFamily symbols.
+# vince: eMMC board; serial_general.c boot-progress log links against
+# native_ufs_log_* and the --unverified probe transport never touches hardware.
 # Stage-1 USB: map usb0 (0x0a600000) and read GSNPSID to prove the block
 # is clocked. No endpoints or gadget yet.
 # TODO(vince): MSM8953 has no DWC3 controller; USB bring-up will use the adreno-era

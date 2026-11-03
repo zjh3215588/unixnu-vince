@@ -1,8 +1,8 @@
-﻿# UniXNU device repo for Redmi 5 Plus (vince / MSM8953). Hardware facts corrected;
+# UniXNU device repo for Redmi 5 Plus (vince / MSM8953). Hardware facts corrected;
 # # TODO(vince): the LBA geometry below is nabu's UFS measurement and does NOT apply.
 # vince is eMMC; measure via fastboot getvar partition-size:userdata + /proc/partitions
 # from TWRP before the first userdata build.
-[userdata] eMMC geometry + owned_memory_size still need on-device measurement (TODO notes inline).
+# [userdata] eMMC geometry + owned_memory_size still need on-device measurement (TODO notes inline).
 # Only the kernel build path is configured; userdata geometry needs on-device measurement.
 
 [board]
@@ -61,16 +61,16 @@ archives = [
     # "audit-storage-interface.py",
     # --unverified is the bring-up mode: adopt the running controller without the verified-root
     # policy bundle.
-    "build-arm-driver.py NativeUfs --unverified",
+    "build-arm-driver.py NativeUfs --unverified",  # vince: restored; serial boot-progress log needs native_ufs_log_* symbols
     # Stage-1 DWC3 is NOT in the kernel build: the driver lives in its own repository and
     # Stage 0 powers usb30_prim GDSC and the branch clocks first; every stage is behind
     # vince-usb=1 and the core reset behind vince-usb-init=1, so the driver can sit in the
     # kernel with the hardware untouched until the boot-arg opens it.
-    "build-arm-driver.py NativeDwc3",
+    # "build-arm-driver.py NativeDwc3",  # vince: MSM8953 has no DWC3 controller (bring-up via qcom HSIC/CI later); its deps (native_smmu_bypass etc.) live in disabled kits
     # Bind NativeUfsBlock's IOBlockStorageDevice imports to the prelinked kext's real runtime
     # addresses (`.globl` + `.set symbol, addr`), so the block driver links without either undefined
     # symbols or a duplicate metaclass. Reads build/native-prelink/*-candidate.macho + .json.
-    "build-ufs-original-bindings.py --component NativeUfs",
+    # "build-ufs-original-bindings.py --component NativeUfs",  # vince: deferred; clang14 rejects its clang16-only -W flags, revisit at prelink
     # "build-ufs-original-bindings.py",  # only with the real NativeUfs block class
     "build-arm-driver.py NativeRamBlock",
     # Redundant with CONFIG_XNU_SOURCE_MOCKFS=y: the built-in objects and this archive
@@ -143,8 +143,10 @@ tool = "kits/NativePrelink/emit_prelink.py"
 # TODO(vince): path below is nabu's BCM2837-era residue; the vince build product is
 # expected at build/xnu/ios-obj/DEVELOPMENT_ARM64_VINCE/mach.development.vince.unstripped.noctf
 # (verify after the first local WSL build lands)
-kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_VINCE/mach.development.vince.unstripped.noctf"
-kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+# vince: the build borrows the upstream BCM2837 machine config (same as nabu);
+# board hardware bring-up happens in the pexpert/console patch layer instead.
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+# kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"  # vince: nabu qualification hash; fill with this board kernelcache hash after first prelink
 slide = "-0x1000000"
 early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
 roots = [

@@ -1,4 +1,4 @@
-﻿# vince_bootstrap_defconfig
+# vince_bootstrap_defconfig
 # The first pass of a cold build. It exists only to produce the compile records under
 # build/xnu/ and one prelinked kernel, which the archive builders that need an "original
 # candidate" then read as their baseline:
