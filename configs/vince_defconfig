@@ -40,7 +40,10 @@ CONFIG_XNU_SOURCE_MOCKFS=y
 CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 CONFIG_XNU_DT_PANIC_REGION=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
-CONFIG_XNU_NATIVE_PAN=y
+# CONFIG_XNU_NATIVE_PAN is not set
+# vince: A53 (ARMv8-A) has no PAN/MPAM/CPU_CFG (Apple ACC registers);
+# enabling it compiles Apple-only msr/mrs into copyio and arm_init, which
+# are UNDEFINED on MSM8953 (verified under QEMU: 24 Apple msr + 14 MPAM mrs).
 CONFIG_XNU_OWNER_DATA_VOLUME_UUID="BEC2158A-350E-4F2E-B87E-A0E69FB0BDEA"
 
 # sheng / uke specific, not carried over:
