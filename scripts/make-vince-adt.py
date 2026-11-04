@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 DRAM_BASE = 0x80000000
 ARMIO_BASE = 0x0b000000          # MSM8953 peripheral block containing the GIC-400
-GIC_DIST = 0x0b001000            # msm8953.dtsi intc@b000000: GICD
+GIC_DIST = 0x0B000000            # mainline msm8953.dtsi: GIC distributor (verified, ANTIGRAVITY handoff)
 GIC_DIST_SIZE = 0x1000
-GIC_REDIST = 0x0b006000          # GICV window used as the redist stand-in (GICv2 has none)
-GIC_REDIST_SIZE = 0x2000
+GIC_CPU = 0x0B002000             # GIC-400 CPU interface (the GICv2 counterpart of the redist slot)
+GIC_CPU_SIZE = 0x2000
 TIMEBASE = 19200000
 
 
@@ -178,7 +178,8 @@ def main():
                             ('interrupt-controller', b'master\0'),
                             ('reg', struct.pack('<4Q',
                                                 GIC_DIST - ARMIO_BASE, GIC_DIST_SIZE,
-                                                GIC_REDIST - ARMIO_BASE, GIC_REDIST_SIZE)),
+                                                GIC_CPU - ARMIO_BASE, GIC_CPU_SIZE)),
+                            # GICv2 has no redistributor; keep the property shape v3-shaped
                             ('redistributor-stride', struct.pack('<Q', 0x2000))])]),
     ])
     args.output.parent.mkdir(parents=True, exist_ok=True)
