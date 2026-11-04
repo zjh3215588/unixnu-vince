@@ -114,7 +114,9 @@ def main():
             for index, reg in enumerate(cpu_regs)]
     # QEMU virt puts its PL011 at 0x09000000; pe_serial.c maps soc_base + reg.
     if args.qemu:
-        ARMIO_BASE = 0x09000000
+        io_base = 0x09000000
+    else:
+        io_base = ARMIO_BASE
     tree = node('device-tree', [
         ('model', b'iPad7,1\0' if args.ipad_identity else b'vince-first-boot\0'),
         *([('target-type', b'J120\0')] if args.ipad_identity else []),
@@ -174,12 +176,12 @@ def main():
         node('arm-io', [('device_type', b'arm-io\0'),
                         ('#address-cells', struct.pack('<I', 2)),
                         ('#size-cells', struct.pack('<I', 2)),
-                        ('ranges', struct.pack('<QQQ', 0, ARMIO_BASE, 0x08000000))],
+                        ('ranges', struct.pack('<QQQ', 0, io_base, 0x08000000))],
              [node('intc', [('compatible', b'arm,gic-v3\0'),
                             ('interrupt-controller', b'master\0'),
                             ('reg', struct.pack('<4Q',
-                                                GIC_DIST - ARMIO_BASE, GIC_DIST_SIZE,
-                                                GIC_REDIST - ARMIO_BASE, GIC_REDIST_SIZE)),
+                                                GIC_DIST - io_base, GIC_DIST_SIZE,
+                                                GIC_REDIST - io_base, GIC_REDIST_SIZE)),
                             ('redistributor-stride', struct.pack('<Q', 0x2000))]),
               # vince: pe_arm_map_interrupt_controller looks for device_type="timer".
               node('timer', [('device_type', b'timer\0'),
@@ -197,3 +199,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
