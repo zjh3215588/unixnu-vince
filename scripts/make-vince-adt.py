@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 DRAM_BASE = 0x80000000
 ARMIO_BASE = 0x0b000000          # MSM8953 peripheral block containing the GIC-400
-GIC_DIST = 0x0B000000            # mainline msm8953.dtsi: GIC distributor (verified, ANTIGRAVITY handoff)
+GIC_DIST = 0x0b001000            # msm8953.dtsi intc@b000000: GICD
 GIC_DIST_SIZE = 0x1000
-GIC_CPU = 0x0B002000             # GIC-400 CPU interface (the GICv2 counterpart of the redist slot)
-GIC_CPU_SIZE = 0x2000
+GIC_REDIST = 0x0b006000          # GICV window used as the redist stand-in (GICv2 has none)
+GIC_REDIST_SIZE = 0x2000
 TIMEBASE = 19200000
 
 
@@ -88,6 +88,8 @@ def main():
     parser.add_argument('--packed-data-ramdisk', action='store_true')
     parser.add_argument('--data-ramdisk', action='store_true')
     parser.add_argument('--trust-cache', action='store_true')
+    parser.add_argument('--qemu', action='store_true',
+                        help='qemu-virt flavour: arm-io window at the PL011 uart (0x09000000) and a uart0 DT node so the VMAPPLE_UART backend registers')
     args = parser.parse_args()
     if (args.unique_chip_id is None) != (args.chip_id is None):
         parser.error('--unique-chip-id and --chip-id must be supplied together')
@@ -110,6 +112,9 @@ def main():
                                    ('device_type', b'cpu\0'), ('compatible', b'arm,cortex-a53\0'),
                                    ('timebase-frequency', struct.pack('<I', TIMEBASE))])
             for index, reg in enumerate(cpu_regs)]
+    # QEMU virt puts its PL011 at 0x09000000; pe_serial.c maps soc_base + reg.
+    if args.qemu:
+        ARMIO_BASE = 0x09000000
     tree = node('device-tree', [
         ('model', b'iPad7,1\0' if args.ipad_identity else b'vince-first-boot\0'),
         *([('target-type', b'J120\0')] if args.ipad_identity else []),
@@ -171,16 +176,19 @@ def main():
                         ('#size-cells', struct.pack('<I', 2)),
                         ('ranges', struct.pack('<QQQ', 0, ARMIO_BASE, 0x08000000))],
              [node('intc', [('compatible', b'arm,gic-v3\0'),
-                            # pe_arm_map_interrupt_controller() looks this up with
-                            # SecureDTFindEntry("interrupt-controller", "master", ...).
-                            # GIC-400 windows stand in for the v3 dist/redist pair until
-                            # the GICv2 path is ported (see module docstring).
                             ('interrupt-controller', b'master\0'),
                             ('reg', struct.pack('<4Q',
                                                 GIC_DIST - ARMIO_BASE, GIC_DIST_SIZE,
-                                                GIC_CPU - ARMIO_BASE, GIC_CPU_SIZE)),
-                            # GICv2 has no redistributor; keep the property shape v3-shaped
-                            ('redistributor-stride', struct.pack('<Q', 0x2000))])]),
+                                                GIC_REDIST - ARMIO_BASE, GIC_REDIST_SIZE)),
+                            ('redistributor-stride', struct.pack('<Q', 0x2000))]),
+              # vince: pe_arm_map_interrupt_controller looks for device_type="timer".
+              node('timer', [('device_type', b'timer\0'),
+                             ('compatible', b'arm,armv8-timer\0'),
+                             ('reg', struct.pack('<2Q', 0, 0x1000))]),
+              # qemu: pe_serial.c VMAPPLE_UART backend looks for name="uart0"
+              *([node('uart0', [('device_type', b'serial\0'),
+                                ('reg', struct.pack('<2Q', 0, 0x1000))])] if args.qemu else []),
+             ]),
     ])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(tree)
